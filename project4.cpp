@@ -1,8 +1,11 @@
 #include <iostream>
 #include "ir_debug.h"
 #include "lexer.h"
+#include "ir_debug.h"
+#include "compiler.h"
+using namespace std;
 
 int main() {
-    std::cout << "Hello, World!" << std::endl;
-    return 0;
+    cout << "HelloWorld";
+    return 1;
 }
