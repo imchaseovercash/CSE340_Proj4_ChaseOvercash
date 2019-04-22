@@ -904,11 +904,9 @@ program *parse_program() {
     return program;
 }
 
-
 //////////////////////////////////////////////////////
 ////////// return to compiler ////////////////////////
 //////////////////////////////////////////////////////
-
 struct StatementNode *parse_stmt_node(stmt_list* stmtList) {
     auto *stmt_list_temp = stmtList;
     auto *stmt_node = new (struct StatementNode);
@@ -996,7 +994,6 @@ struct StatementNode *parse_stmt_node(stmt_list* stmtList) {
         }
     }
     else if (stmt_list_temp->STMT->path == "PRINT") {
-        auto *value_node = new ValueNode;
         value_node->name = stmt_list_temp->STMT->PRINT->ID->name;
         value_node->value = stmt_list_temp->STMT->PRINT->ID->value;
         auto *temp_print_stmt = new PrintStatement;
