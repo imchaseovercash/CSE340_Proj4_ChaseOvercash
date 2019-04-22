@@ -192,12 +192,12 @@ int main()
 {
     struct StatementNode * program;
     program = parse_generate_intermediate_representation();
-//    if (DEBUG)
-//    {
-//        printf("\n-------------------------------------------\n");
-//        print_program(program);
-//        printf("\n-------------------------------------------\n");
-//    }
-//    execute_program(program);
+    if (DEBUG)
+    {
+        printf("\n-------------------------------------------\n");
+        print_program(program);
+        printf("\n-------------------------------------------\n");
+    }
+    execute_program(program);
     return 0;
 }

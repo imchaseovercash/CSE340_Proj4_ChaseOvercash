@@ -1,10 +1,10 @@
-//
-// Created by Chase Overcash on 4/8/2019.
-//
-
-#ifndef CSE340_PROJ4_CHASEOVERCASH_COMPILER_H
-#define CSE340_PROJ4_CHASEOVERCASH_COMPILER_H
-
+/*
+ * Copyright (C) Rida Bazzi, 2017
+ *
+ * Do not share this file with anyone
+ */
+#ifndef _COMPILER_H_
+#define _COMPILER_H_
 
 #include <string>
 
@@ -106,6 +106,4 @@ struct StatementNode * parse_generate_intermediate_representation();
   your code.
 */
 
-
-
-#endif //CSE340_PROJ4_CHASEOVERCASH_COMPILER_H
+#endif /* _COMPILER_H_ */
