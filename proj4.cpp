@@ -15,16 +15,12 @@ LexicalAnalyzer lexer;
 //////////////////////////////////////////////////////
 //// Tree Utilities
 /////////////////////////////////////////////////////
-deque<ValueNode *> global_LHS;
-deque<ValueNode *> global_RHS;
-bool while_scope = false;
-int tracker = 0;
 struct node {
     string name = "";
     int value = 0;
     Token token;
 };
-deque<node *> var_vals;
+deque<ValueNode *> var_vals;
 bool impactful = true;
 //////////////////////////////////////////////////////
 //// Parse Trees
@@ -41,12 +37,9 @@ struct if_branch;
 struct while_stmt;
 struct print_stmt;
 struct op;
-struct primary;
 struct expr;
 struct assign_stmt;
-struct stmt;
 struct stmt_list;
-struct body;
 struct id_list;
 struct var_section;
 
@@ -55,7 +48,7 @@ struct var_section;
 //////////////////////////////////////////////////////
 struct program {
     var_section *VS = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 };
 
@@ -65,14 +58,7 @@ struct var_section {
 };
 
 struct id_list {
-    node *ID = NULL;
     id_list *ID_LIST = NULL;
-
-};
-
-struct body {
-    StatementNode *STMT_LIST = NULL;
-
 };
 
 struct stmt_list {
@@ -82,37 +68,17 @@ struct stmt_list {
 
 };
 
-struct stmt {
-    StatementNode *ASGMT = NULL;
-    StatementNode *PRINT = NULL;
-    StatementNode *WHILE_STMT = NULL;
-    StatementNode *IF = NULL;
-    StatementNode *SWITCH_STMT = NULL;
-    StatementNode *FOR_STMT = NULL;
-    string path = "";
-
-};
-
 struct assign_stmt {
-    node *ID = NULL;
-    primary *PRIM = NULL;
+    ValueNode *PRIM = NULL;
     expr *EXPR = NULL;
 
 };
 
 struct expr {
-    primary *PRIM1 = NULL;
+    ValueNode *PRIM1 = NULL;
     op *OP = NULL;
-    primary *PRIM2 = NULL;
+    ValueNode *PRIM2 = NULL;
     int newVal = 0;
-
-};
-
-struct primary {
-    int value;
-    string name;
-    Token token;
-    TokenType prim_type;
 
 };
 
@@ -126,21 +92,22 @@ struct op {
 struct while_stmt {
     node *WHILE = NULL;
     condition *CON = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 };
 
 struct if_branch {
     node *IF = NULL;
     condition *CON = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 };
 
 struct condition {
-    primary *PRIM1 = NULL;
+    ValueNode *PRIM1 = NULL;
+    ConditionalOperatorType CON_OP;
     relop *RELOP = NULL;
-    primary *PRIM2 = NULL;
+    ValueNode *PRIM2 = NULL;
     bool conditional_truth = false;
 
 };
@@ -152,8 +119,6 @@ struct relop {
 };
 
 struct switch_stmt {
-    node *SWITCH = NULL;
-    node *ID = NULL;
     case_list *CASE_LIST = NULL;
     default_case *DEF_CASE = NULL;
 
@@ -164,7 +129,7 @@ struct for_stmt {
     StatementNode *ASGMT1 = NULL;
     condition *CON = NULL;
     StatementNode *ASGMT2 = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 
 };
@@ -178,13 +143,13 @@ struct case_list {
 struct case_t {
     node *CASE_T = NULL;
     node *NUM = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 };
 
 struct default_case {
     node *DEF = NULL;
-    body *BODY = NULL;
+    StatementNode *BODY = NULL;
 
 };
 
@@ -194,11 +159,11 @@ struct default_case {
 ///////// Function Declarations
 //////////////////////////////////////////////////////
 //////////////////////////////////////////////////////
-body *parse_body();
+StatementNode *parse_body();
 
 condition *parse_condition();
 
-primary *parse_primary();
+ValueNode *parse_primary();
 
 StatementNode *parse_assign_stmt();
 
@@ -210,22 +175,33 @@ void syntax_error() {
     exit(EXIT_FAILURE);
 }
 
-int var_vals_indexOf(Token token) {
+int var_vals_indexOf(string name) {
     int index = 0;
-    for (node *n : var_vals) {
-        if (n->name == token.lexeme)
+    for (ValueNode *n : var_vals) {
+        if (n->name == name)
             return index;
         index++;
     }
     return -1;
 }
 
-int var_value(Token token) {
-    for (node *n : var_vals) {
-        if (n->name == token.lexeme)
+int var_value(string name) {
+    for (ValueNode *n : var_vals) {
+        if (n->name == name)
             return n->value;
     }
     return 0;
+}
+
+void update_val(string name, int newVal) {
+    int i = 0;
+    for (ValueNode *n: var_vals) {
+        if (n->name == name) {
+            var_vals.at(i)->value = newVal;
+            break;
+        }
+        i++;
+    }
 }
 
 //////////////////////////////////////////////////////
@@ -353,6 +329,7 @@ condition *parse_condition() {
     ////////////////////////////////////////
     condition->PRIM1 = parse_primary();
     condition->RELOP = parse_relop();
+    condition->CON_OP = condition->RELOP->REL_OP;
     condition->PRIM2 = parse_primary();
 
     if (condition->RELOP->REL_OP == CONDITION_LESS) {
@@ -418,26 +395,20 @@ op *parse_operator() {
     else syntax_error();
 }
 
-primary *parse_primary() {
+ValueNode *parse_primary() {
     /////////// Initialization /////////////
-    auto *primary = new (struct primary);
     ///////////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == ID) {
         //t1.Print();
-        primary->token = t1;
-        primary->name = t1.lexeme;
-        primary->value = var_value(t1);
-        primary->prim_type = ID;
-        return primary;
+        return var_vals.at(var_vals_indexOf(t1.lexeme));
     }
     else if (t1.token_type == NUM) {
         //t1.Print();
-        primary->token = t1;
-        primary->name = "";
-        primary->value = stoi(t1.lexeme);
-        primary->prim_type = NUM;
-        return primary;
+        ValueNode *OP = new ValueNode;
+        OP->name = "";
+        OP->value = stoi(t1.lexeme);
+        return OP;
     }
     else {
         syntax_error();
@@ -451,6 +422,7 @@ expr *parse_expr() {
     expr->PRIM1 = parse_primary();
     expr->OP = parse_operator();
     expr->PRIM2 = parse_primary();
+
     if (expr->OP->operatorType == OPERATOR_MINUS) {
         expr->newVal = expr->PRIM1->value - expr->PRIM2->value;
     }
@@ -513,38 +485,83 @@ StatementNode *parse_for_stmt() {
 
 StatementNode *parse_switch_stmt() {
     ////////////// Initialization ////////////////
-    auto *switch_stmt = new (struct switch_stmt);
+    auto *case_list = new (struct case_list);
+    auto* default_c = new default_case;
     auto *stmt_node = new StatementNode;
-    switch_stmt->SWITCH = new node;
-    switch_stmt->ID = new node;
+    stmt_node->type = IF_STMT;
+    stmt_node->if_stmt = new IfStatement;
+    auto* noop_node = new StatementNode;
+    noop_node->type = NOOP_STMT;
+    noop_node->next = NULL;
+    stmt_node->next = noop_node;
+    stmt_node->if_stmt->false_branch = noop_node;
+    auto* goto_node = new StatementNode;
+    goto_node->type = GOTO_STMT;
+    goto_node->goto_stmt = new GotoStatement;
+    ValueNode *OP = new ValueNode;
     /////////////////////////////////////////////
 
     Token t1 = lexer.GetToken();
     if (t1.token_type == SWITCH) {
         //t1.Print();
 
-        switch_stmt->SWITCH->token = t1;
-        switch_stmt->SWITCH->name = t1.lexeme;
-
         Token t2 = lexer.GetToken();
         if (t2.token_type == ID) {
             // //t2.Print();
-
-            switch_stmt->ID->name = t2.lexeme;
-            switch_stmt->ID->token = t2;
-
+            stmt_node->if_stmt->condition_operand1 = var_vals.at(var_vals_indexOf(t2.lexeme));
+            stmt_node->if_stmt->condition_op = CONDITION_GREATER;
+            OP->name = "Case Node";
+            OP->value = stmt_node->if_stmt->condition_operand1->value -1;
+            stmt_node->if_stmt->condition_operand2 = OP;
             Token t3 = lexer.GetToken();
             if (t3.token_type == LBRACE) {
                 //t3.Print();
-                switch_stmt->CASE_LIST = parse_case_list();
+                case_list = parse_case_list();
                 Token t4 = lexer.GetToken();
+
+                bool found = false;
+                while (case_list->CASE != NULL)
+                {
+                    if (case_list->CASE->NUM->value == stmt_node->if_stmt->condition_operand1->value)
+                    {
+                        found = true;
+                        stmt_node->if_stmt->true_branch = case_list->CASE->BODY;
+                        break;
+                    }
+                }
+
                 if (t4.token_type == RBRACE) {
                     //t4.Print();
+                    if (!found)
+                    {
+                        stmt_node->if_stmt->condition_operand2->value += 1;
+                        stmt_node->if_stmt->true_branch = noop_node;
+                    }
+                    auto * temp = stmt_node->if_stmt->true_branch;
+                    while (temp->next!= NULL)
+                    {
+                        temp = temp->next;
+                    }
+                    temp->next = goto_node;
+                    goto_node->goto_stmt->target = noop_node->next;
+                    goto_node->next = noop_node->next;
                     return stmt_node;
                 }
                 else {
                     lexer.UngetToken(t4);
-                    switch_stmt->DEF_CASE = parse_default_case();
+                    default_c = parse_default_case();
+                    if (!found)
+                    {
+                        stmt_node->if_stmt->true_branch = default_c->BODY;
+                    }
+                    auto* temp = stmt_node->if_stmt->true_branch;
+                    while (temp->next != NULL)
+                    {
+                        temp = temp->next;
+                    }
+                    temp->next = goto_node;
+                    goto_node->goto_stmt->target = noop_node->next;
+                    goto_node->next = noop_node->next;
                     Token t5 = lexer.GetToken();
                     if (t5.token_type == SEMICOLON) {
                         //t5.Print();
@@ -570,45 +587,32 @@ StatementNode *parse_switch_stmt() {
 
 StatementNode *parse_if_branch() {
     /////////////////////////////////////
-    auto *if_branch = new (struct if_branch);
     auto *stmt_node = new (StatementNode);
-    auto *noop_node = new StatementNode;
-    noop_node->type = NOOP_STMT;
-    noop_node->next = NULL;
     stmt_node->type = IF_STMT;
     stmt_node->if_stmt = new IfStatement;
-    if_branch->IF = new node;
     /////////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == IF) {
         //t1.Print();
-
-        if_branch->IF->name = t1.lexeme;
-        if_branch->IF->token = t1;
-        if_branch->CON = parse_condition();
-        ValueNode *OP1 = new ValueNode;
-        ValueNode *OP2 = new ValueNode;
-        OP1->value = if_branch->CON->PRIM1->value;
-        OP1->name = if_branch->CON->PRIM1->name;
-        OP2->value = if_branch->CON->PRIM2->value;
-        OP2->name = if_branch->CON->PRIM2->name;
-        cout << "if :" << OP1->name << " :" << OP1->value << "  OP  " << OP2->name << " :" << OP2->value << "\n";
-        stmt_node->if_stmt->condition_operand1 = OP1;
-        stmt_node->if_stmt->condition_op = if_branch->CON->RELOP->REL_OP;
-        stmt_node->if_stmt->condition_operand2 = OP2;
-        if (!if_branch->CON->conditional_truth) {
-            impactful = false;
-        }
-        if_branch->BODY = parse_body();
-        stmt_node->if_stmt->true_branch = if_branch->BODY->STMT_LIST;
-        StatementNode *curr = if_branch->BODY->STMT_LIST;
+        auto* con = parse_condition();
+        stmt_node->if_stmt->condition_operand1 = con->PRIM1;
+        stmt_node->if_stmt->condition_op = con->RELOP->REL_OP;
+        stmt_node->if_stmt->condition_operand2 = con->PRIM2;
+//        if (!con->conditional_truth) {
+//            impactful = false;
+//        }
+        stmt_node->if_stmt->true_branch = parse_body();
+        auto *noop_node = new StatementNode;
+        noop_node->type = NOOP_STMT;
+        noop_node->next = NULL;
+        StatementNode *curr = stmt_node->if_stmt->true_branch;
         while (curr->next != NULL) {
             curr = curr->next;
         }
         curr->next = noop_node;
+
         stmt_node->if_stmt->false_branch = noop_node;
         stmt_node->next = noop_node;
-
         impactful = true;
         return stmt_node;
     }
@@ -621,32 +625,44 @@ StatementNode *parse_while_stmt() {
     ////////////////////////////////////////////
     auto *while_stmt = new (struct while_stmt);
     auto *stmt_node = new StatementNode;
+    stmt_node->type = IF_STMT;
+    stmt_node->if_stmt = new IfStatement;
     while_stmt->WHILE = new node;
-    auto *noop_node = new StatementNode;
-    noop_node->type = NOOP_STMT;
-    noop_node->next = NULL;
-    auto *goto_node = new StatementNode;
-    goto_node->type = GOTO_STMT;
-    goto_node->goto_stmt = new GotoStatement;
+
     ////////////////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == WHILE) {
         //t1.Print();
-
-        while_stmt->WHILE->name = t1.lexeme;
-        while_stmt->WHILE->token = t1;
         while_stmt->CON = parse_condition();
         /////////////////////////////////////////
-//        ValueNode* OP1 = new ValueNode;
-//        OP1->value = while_stmt->CON->PRIM1->value;
-//        OP1->name = while_stmt->CON->PRIM1->name;
-//        ValueNode* OP2 = new ValueNode;
-//        OP2->value = while_stmt->CON->PRIM2->value;
-//        OP2->name = while_stmt->CON->PRIM2->name;
-//        global_LHS.push_back(OP1);
-//        global_RHS.push_back(OP2);
-        /////////////////////////////////////////////
-        while_stmt->BODY = parse_body();
+        stmt_node->if_stmt->condition_operand1 = while_stmt->CON->PRIM1;
+        stmt_node->if_stmt->condition_operand2 = while_stmt->CON->PRIM2;
+        stmt_node->if_stmt->condition_op = while_stmt->CON->CON_OP;
+        stmt_node->if_stmt->true_branch = new StatementNode;
+        auto *noop_node = new StatementNode;
+        noop_node->type = NOOP_STMT;
+        noop_node->next = NULL;
+        stmt_node->if_stmt->false_branch = noop_node;
+        stmt_node->next = noop_node;
+        //////////////////////  ///////////////////////
+//        if (!while_stmt->CON->conditional_truth) {
+//            impactful = false;
+//        }
+        StatementNode *true_branch = parse_body();
+        stmt_node->if_stmt->true_branch = true_branch;
+        StatementNode *curr = true_branch;
+        auto *goto_node = new StatementNode;
+        goto_node->type = GOTO_STMT;
+        goto_node->goto_stmt = new GotoStatement;
+        goto_node->goto_stmt->target = stmt_node;
+        while (curr->next != NULL) {
+            curr = curr->next;
+        }
+        goto_node->next = noop_node;
+        curr->next = goto_node;
+        impactful = true;
+
+
         return stmt_node;
     }
     else {
@@ -668,14 +684,14 @@ StatementNode *parse_print_stmt() {
         Token t2 = lexer.GetToken();
         if (t2.token_type == ID) {
             //t2.Print();
-
             Token t3 = lexer.GetToken();
             if (t3.token_type == SEMICOLON) {
                 //t3.Print();
-                ValueNode *OP1 = new ValueNode;
-                OP1->value = var_value(t2);
-                OP1->name = t2.lexeme;
-                stmt_node->print_stmt->id = OP1;
+                stmt_node->print_stmt->id = var_vals.at(var_vals_indexOf(t2.lexeme));
+//                for (ValueNode *n :var_vals) {
+//                    cout << "var : " << n->name << " has value of: " << n->value << "\n";
+//                }
+//                cout << "\n\n\n";
                 return stmt_node;
             }
             else {
@@ -686,32 +702,21 @@ StatementNode *parse_print_stmt() {
             syntax_error();
         }
     }
-    else {
-        syntax_error();
-    }
+    syntax_error();
 }
 
 StatementNode *parse_assign_stmt() {
     ///////////// Initialize/////////////////////
-    auto *assign_stmt = new (struct assign_stmt);
-    assign_stmt->ID = new (node);
     auto *stmt_node = new StatementNode;
     stmt_node->assign_stmt = new AssignmentStatement;
     stmt_node->type = ASSIGN_STMT;
     stmt_node->next = NULL;
-    auto *lhs = new ValueNode;
     ////////////////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == ID) {
         //t1.Print();
+        stmt_node->assign_stmt->left_hand_side = var_vals.at(var_vals_indexOf(t1.lexeme));
 
-        assign_stmt->ID->name = t1.lexeme;
-        assign_stmt->ID->token = t1;
-        lhs->name = t1.lexeme;
-
-        if (var_vals_indexOf(t1) == -1) {
-            var_vals.push_back(assign_stmt->ID);
-        }
         Token t2 = lexer.GetToken();
         if (t2.token_type == EQUAL) {
             //t2.Print();
@@ -723,24 +728,12 @@ StatementNode *parse_assign_stmt() {
                 if (t4.token_type == SEMICOLON) {
                     lexer.UngetToken(t4);
                     lexer.UngetToken(t3);
-                    assign_stmt->PRIM = parse_primary();
-                    int i = 0;
-                    assign_stmt->ID->value = assign_stmt->PRIM->value;
-                    lhs->value = assign_stmt->PRIM->value;
-                    for (node *node: var_vals) {
-                        if (node->name == t1.lexeme && impactful) {
-                            var_vals.at(i)->value = assign_stmt->PRIM->value;
-                        }
-                        i++;
+                    stmt_node->assign_stmt->operand1 = parse_primary();
+                    if (impactful) {
+                        update_val(t1.lexeme, stmt_node->assign_stmt->operand1->value);
                     }
-                    Token t5 = lexer.GetToken();
+                    lexer.GetToken();
                     //t5.Print();
-
-                    stmt_node->assign_stmt->left_hand_side = lhs;
-                    ValueNode *OP1 = new ValueNode;
-                    OP1->value = assign_stmt->PRIM->value;
-                    OP1->name = assign_stmt->PRIM->name;
-                    stmt_node->assign_stmt->operand1 = OP1;
                     stmt_node->assign_stmt->op = OPERATOR_NONE;
                     stmt_node->assign_stmt->operand2 = NULL;
 
@@ -750,35 +743,17 @@ StatementNode *parse_assign_stmt() {
                 else {
                     lexer.UngetToken(t4);
                     lexer.UngetToken(t3);
-                    assign_stmt->EXPR = parse_expr();
-
-                    ValueNode *OP1 = new ValueNode;
-                    ValueNode *OP2 = new ValueNode;
-                    OP1->value = assign_stmt->EXPR->PRIM1->value;
-                    OP1->name = assign_stmt->EXPR->PRIM1->name;
-                    OP2->value = assign_stmt->EXPR->PRIM2->value;
-                    OP2->name = assign_stmt->EXPR->PRIM2->name;
-                    stmt_node->assign_stmt->operand1 = OP1;
-                    stmt_node->assign_stmt->operand2 = OP2;
-                    stmt_node->assign_stmt->op = assign_stmt->EXPR->OP->operatorType;
-
-
+                    auto *expr_stmt = parse_expr();
+                    stmt_node->assign_stmt->operand1 = expr_stmt->PRIM1;
+                    stmt_node->assign_stmt->operand2 = expr_stmt->PRIM2;
+                    stmt_node->assign_stmt->op = expr_stmt->OP->operatorType;
                     Token t5 = lexer.GetToken();
                     if (t5.token_type == SEMICOLON) {
                         //t5.Print();
-                        assign_stmt->ID->value = assign_stmt->EXPR->newVal;
-                        lhs->value = assign_stmt->EXPR->newVal;
-                        int i = 0;
-                        for (node *node : var_vals) {
-                            if (node->name == t1.lexeme && impactful) {
-                                //cout << "var val: " << var_vals.at(i)->name << " " << to_string(var_vals.at(i)->value);
-                                var_vals.at(i)->value = assign_stmt->EXPR->newVal;
-                            }
-                            i++;
+                        if (impactful) // aka condition is true
+                        {
+                            update_val(t1.lexeme, expr_stmt->newVal);
                         }
-
-                        stmt_node->assign_stmt->left_hand_side = lhs;
-
                         return stmt_node;
                     }
                     else {
@@ -801,39 +776,32 @@ StatementNode *parse_assign_stmt() {
 
 StatementNode *parse_stmt() {
     ////////////// Initialize //////////
-    StatementNode *stmt_node;
 ////////////////////////////////////
 
     Token t1 = lexer.GetToken();
     if (t1.token_type == ID) {
         lexer.UngetToken(t1);
-        stmt_node = parse_assign_stmt();
-        return stmt_node;
+        return parse_assign_stmt();
     }
     else if (t1.token_type == PRINT) {
         lexer.UngetToken(t1);
-        stmt_node = parse_print_stmt();
-        return stmt_node;
+        return parse_print_stmt();
     }
     else if (t1.token_type == WHILE) {
         lexer.UngetToken(t1);
-        stmt_node = parse_while_stmt();
-        return stmt_node;
+        return parse_while_stmt();
     }
     else if (t1.token_type == IF) {
         lexer.UngetToken(t1);
-        stmt_node = parse_if_branch();
-        return stmt_node;
+        return parse_if_branch();
     }
     else if (t1.token_type == SWITCH) {
         lexer.UngetToken(t1);
-        stmt_node = parse_switch_stmt();
-        return stmt_node;
+        return parse_switch_stmt();
     }
     else if (t1.token_type == FOR) {
         lexer.UngetToken(t1);
-        stmt_node = parse_for_stmt();
-        return stmt_node;
+        return parse_for_stmt();
     }
     else {
         syntax_error();
@@ -842,10 +810,8 @@ StatementNode *parse_stmt() {
 
 StatementNode *parse_stmt_list() {
     ////////////// Initialize ///////////////
-    auto *stmt_list = new (struct stmt_list);
-    auto *statement_node = new StatementNode;
-    ////////////////////////////////////////
-    statement_node = parse_stmt();
+    auto *statement_node = parse_stmt();
+    ///////////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == RBRACE) {
         lexer.UngetToken(t1);
@@ -853,7 +819,10 @@ StatementNode *parse_stmt_list() {
     }
     else if (t1.token_type != END_OF_FILE) {
         lexer.UngetToken(t1);
-        stmt_list->go = 1;
+        if (statement_node->type == IF_STMT) {
+            statement_node->next->next = parse_stmt_list();
+            return statement_node;
+        }
         statement_node->next = parse_stmt_list();
         return statement_node;
     }
@@ -862,14 +831,13 @@ StatementNode *parse_stmt_list() {
     }
 }
 
-body *parse_body() {
+StatementNode *parse_body() {
     //////////// Initialization //////
-    auto *body = new (struct body);
     //////////////////////////////////
     Token t1 = lexer.GetToken();
     if (t1.token_type == LBRACE) {
         //t1.Print();
-        body->STMT_LIST = parse_stmt_list();
+        auto *body = parse_stmt_list();
         Token t2 = lexer.GetToken();
         if (t2.token_type == RBRACE) {
             //t2.Print();
@@ -885,43 +853,26 @@ body *parse_body() {
 }
 
 id_list *parse_id_list() {
+    auto *id_list = new struct id_list;
     /////////////// Initialize //////////
-
-    auto *id_list = new (struct id_list);
-    id_list->ID = new node;
-    /////////////////////////////////////
-
-    Token t1 = lexer.GetToken();
-    if (t1.token_type == ID) {
-        //t1.Print();
-
-        id_list->ID->name = t1.lexeme;
-        id_list->ID->value = 0;
-        id_list->ID->token = t1;
-        var_vals.push_back(id_list->ID);
-
-        Token t2 = lexer.GetToken();
-        ///////////////////////// Var_list /////////////
-        if (t2.token_type == COMMA) {
-            //t2.Print();
-            Token t3 = lexer.GetToken();
-            if (t3.token_type == ID) {
-                lexer.UngetToken(t3);
-                id_list->ID_LIST = parse_id_list();
-                return id_list;
-            }
-        } ///////////////////////// Base Case ///////
-        else if (t2.token_type != END_OF_FILE) {
-            lexer.UngetToken(t2);
-            return id_list;
+    Token token = lexer.GetToken();
+    while (token.token_type != SEMICOLON) {
+        if (token.token_type == ID) {
+            ValueNode *vn = new ValueNode;
+            vn->value = 0;
+            vn->name = token.lexeme;
+            var_vals.push_back(vn);
+            token = lexer.GetToken();
+        }
+        else if (token.token_type == COMMA) {
+            token = lexer.GetToken();
         }
         else {
             syntax_error();
         }
     }
-    else {
-        syntax_error();
-    }
+    lexer.UngetToken(token);
+    return id_list;
 }
 
 var_section *parse_var_section() {
@@ -954,9 +905,6 @@ program *parse_program() {
 }
 
 struct StatementNode *parse_generate_intermediate_representation() {
-    auto *valN = new ValueNode;
-    valN->name = "Push Material";
-    valN->value = 999;
     auto *program = parse_program();
-    return program->BODY->STMT_LIST;
+    return program->BODY;
 }
